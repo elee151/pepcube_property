@@ -165,7 +165,7 @@ DATASETS=("./data/experimental_sequences.csv"
 
 for input_csv in "${DATASETS[@]}"; do
 tag=$(basename "$input_csv" .csv)
-SPLIT_STRATEGY=random TORCH_FORCE_WEIGHTS_ONLY_LOAD=0 BASE_DIR=/home/rbirolo/pepcube_property ACCELERATOR=gpu MODEL_ARCH=multi_head nohup python chemprop/predict_chemprop_multitask_load.py --model_dir /home/rbirolo/pepcube_property/runs/multi_head_pretrained_random/finetune/new_1M/run3_new_chemberta_synth_camsol10k_hemo550/final/ --input_csv "$input_csv" --output_csv "predictions/${tag}_chemprop_pretrained_final.csv"
+SPLIT_STRATEGY=random TORCH_FORCE_WEIGHTS_ONLY_LOAD=0 BASE_DIR=/home/rbirolo/pepcube_property ACCELERATOR=gpu MODEL_ARCH=multi_head nohup python chemprop/predict_chemprop_multitask.py --model_dir /home/rbirolo/pepcube_property/runs/multi_head_pretrained_random/finetune/new_1M/run3_new_chemberta_synth_camsol10k_hemo550/final/ --input_csv "$input_csv" --output_csv "predictions/${tag}_chemprop_pretrained_final.csv"
 done
 '> ./logs/$(date +%Y-%m-%d)_chemprop_pretrained_predictions.log 2>&1 &
 ```
@@ -179,7 +179,7 @@ DATASETS=("./data/experimental_sequences.csv"
 )
 for input_csv in "${DATASETS[@]}"; do
 tag=$(basename "$input_csv" .csv)
-SPLIT_STRATEGY=random TORCH_FORCE_WEIGHTS_ONLY_LOAD=0 BASE_DIR=/home/rbirolo/pepcube_property ACCELERATOR=gpu MODEL_ARCH=multi_head nohup python chemprop/predict_chemprop_multitask_load.py --model_dir runs/multi_head_chemprop_random/finetune/chemprop/run3_new_chemberta_synth_camsol10k_hemo550/final --input_csv "$input_csv" --output_csv "predictions/${tag}_chemprop_default_final.csv"
+SPLIT_STRATEGY=random TORCH_FORCE_WEIGHTS_ONLY_LOAD=0 BASE_DIR=/home/rbirolo/pepcube_property ACCELERATOR=gpu MODEL_ARCH=multi_head nohup python chemprop/predict_chemprop_multitask.py --model_dir runs/multi_head_chemprop_random/finetune/chemprop/run3_new_chemberta_synth_camsol10k_hemo550/final --input_csv "$input_csv" --output_csv "predictions/${tag}_chemprop_default_final.csv"
 done
 '> ./logs/$(date +%Y-%m-%d)_chemprop_def_predictions_final.log 2>&1 &
 ```

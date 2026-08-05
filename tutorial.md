@@ -170,6 +170,7 @@ done
 '> ./logs/$(date +%Y-%m-%d)_chemprop_pretrained_predictions.log 2>&1 &
 ```
 From a finetune model that was from a default encoder (ChemProp or Chemeleon):
+- For chemeleon, make sure to set PIPELINE_MODE=chemeleon so the proper model is loaded
 
 ```bash
 nohup bash -c '
@@ -183,6 +184,7 @@ SPLIT_STRATEGY=random TORCH_FORCE_WEIGHTS_ONLY_LOAD=0 BASE_DIR=/home/rbirolo/pep
 done
 '> ./logs/$(date +%Y-%m-%d)_chemprop_def_predictions_final.log 2>&1 &
 ```
+
 ## Baseline ML
 Run from `pepcube_chemprop` env:
 

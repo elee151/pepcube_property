@@ -13,7 +13,8 @@ The following have been used to submit the jobs or are examples on how to submit
 - For models that load a pretrained checkpoint, you can eitherspecify a directory in (--pretrain_ckpt) or let the script resolve one from a path built off your inputs. This path structure is specific (see `config.py`) so if your checkpoint won't match it, just pass the path explicitly via model_dir
 - Most scripts logs a standard output that incorporate chemprop and the transformers output along with extras to track progress. General results are saved as jsons and the results.py script writes them to one of three results files
 
-## Transformer Submissions (env  = pepcube_transformer)
+## Transformer Submissions 
+###--conda env  = pepcube_transformer--
 
 ### LoRA fine-tuning
 
@@ -90,7 +91,8 @@ echo "PID: $!"
 ACCELERATOR=gpu SPLIT_STRATEGY=group NUM_WORKERS=4 HF_HOME=/home/rbirolo/pepcube_property/hf_cache CHEMBERTA_MODEL=/home/rbirolo/pepcube_property/hf_cache/hub/models--DeepChem--ChemBERTa-77M-MTR/snapshots/fc007d31c2fb774ab7a8e5a8d318e25cb01d2da1 nohup python transformer/pretrain_chemberta.py --subset_name new_1M --cluster_col cluster_umap_hdb > ./logs/$(date +%Y-%m-%d)_pretrain_chemberta_trial.log
 ```
 
-## ChemProp Submissions (env  = pepcube_chemprop)
+## ChemProp Submissions 
+###--conda env  = pepcube_chemprop--
 
 ### Finetuning Multitask Pretrained Model - using optimized hyperparameters from HPO 
 

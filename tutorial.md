@@ -5,7 +5,7 @@ Examples on how to run the various scripts for pepcube_transformer (ChemBERTa, P
 ## Setup
 
 All scripts rely on the base configuration and variables set in `config.py` such as the pipeline mode (`chemprop`, `chemeleon`, `pretrained`, etc.).
-The following have been used to submit the jobs or are examples on how 
+The following have been used to submit the jobs or are examples on how to submit.
 
 - To customize a run, overwrite the relevant environment variables when launching a script (examples below).
 - To add or change datasets/configurations, edit the config file directly.

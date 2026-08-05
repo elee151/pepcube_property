@@ -14,7 +14,7 @@ The following have been used to submit the jobs or are examples on how to submit
 - Most scripts logs a standard output that incorporate chemprop and the transformers output along with extras to track progress. General results are saved as jsons and the results.py script writes them to one of three results files
 
 ## Transformer Submissions 
-###--conda env  = pepcube_transformer--
+###conda env  = pepcube_transformer
 
 ### LoRA fine-tuning
 
@@ -92,7 +92,7 @@ ACCELERATOR=gpu SPLIT_STRATEGY=group NUM_WORKERS=4 HF_HOME=/home/rbirolo/pepcube
 ```
 
 ## ChemProp Submissions 
-###--conda env  = pepcube_chemprop--
+###conda env  = pepcube_chemprop
 
 ### Finetuning Multitask Pretrained Model - using optimized hyperparameters from HPO 
 

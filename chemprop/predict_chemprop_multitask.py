@@ -1,20 +1,16 @@
 """
-predict_chemprop_multitask.py
-Regenerates the 90% train+val split (seeded, same split functions and
-config.SEED as finetune_chemprop_multitask.py's final-model block), trains a
-multi-head Chemprop model on it, and predicts on an input CSV of peptide SMILES.
+predict_chemprop_multitask_full.py
+Loads finetuned multi-head Chemprop checkpoint using evaluate_chemprop_multitask.py logic
 
 Example:
-    python predict_chemprop_multitask.py \
-        --run_id full_run \
-        --pretrain_ckpt ~/pepcube_property/pretrained_chemprop_all_data/pretrained_model.pt \
-        --model_dir pretrained_chemprop_90_trainval \
+    python predict_chemprop_multitask_load.py \
+        --model_dir pretrained_chemprop_90/final \
+        --subset_name new_1M \
         --input_csv data/experimental_sequences.csv \
-        --output_csv preds_90_trainval.csv
+        --output_csv preds_90.csv
 """
 
 import argparse
-import json
 import logging
 import os
 from pathlib import Path
@@ -26,7 +22,6 @@ os.environ.setdefault("PYTORCH_MPS_HIGH_WATERMARK_RATIO", "0.0")
 import numpy as np
 import pandas as pd
 import torch
-import lightning.pytorch as pl
 from sklearn.preprocessing import StandardScaler
 from chemprop import featurizers, nn as cpnn
 from chemprop.data.collate import BatchMolGraph
@@ -43,25 +38,19 @@ if _p.name == "pepcube_property" and str(_p.parent) not in _sys.path:
 import pepcube_property.config as config
 from pepcube_property.utils import *
 
-from finetune_chemprop_multitask import (
-    build_multihead_model,
-    load_and_merge_datasets,
-    fit_scalers,
-    scale_targets,
-    MultiHeadDataset,
-    build_loader,
-    load_encoder,
-    CHEMPROP_SUBSET_LABEL,
-    CHEMELEON_SUBSET_LABEL,
-    HEAD_KEYS,
-)
+import importlib, sys
+_mh_path = Path(__file__).parent / "finetune_chemprop_multitask.py"
+_spec     = importlib.util.spec_from_file_location("finetune_multihead", _mh_path)
+_mh_mod   = importlib.util.module_from_spec(_spec)
+sys.modules["finetune_multihead"] = _mh_mod
+_spec.loader.exec_module(_mh_mod)
+
+MultiHeadMPNN = _mh_mod.MultiHeadMPNN
+HEAD_KEYS     = _mh_mod.HEAD_KEYS
+load_encoder  = _mh_mod.load_encoder
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
-
-MODEL_FILENAME = "trainval_model.pt"
-SCALER_FILENAME = "trainval_scalers.pt"
-ARCH_FILENAME = "architecture.json"
 
 
 def bmg_to_device(bmg, device):
@@ -76,153 +65,64 @@ def get_device():
     if config.ACCELERATOR == "gpu" and torch.cuda.is_available():
         return torch.device("cuda")
     if config.ACCELERATOR == "gpu" and not torch.cuda.is_available():
-        logger.warning("ACCELERATOR=gpu but no CUDA device is available. Run on cpu")
+        logger.warning("ACCELERATOR=gpu but no CUDA device is available — run on cpu")
     return torch.device("cpu")
 
 
-def load_scalers(scaler_path):
-    saved_scalers = torch.load(scaler_path, map_location="cpu", weights_only=False)
+#  Model loading — identical to evaluate_chemprop_multitask.py
+def load_scalers(scalers_path) -> dict:
+    saved = torch.load(scalers_path, map_location="cpu", weights_only=False)
     scalers = {}
-    for name, sc_data in saved_scalers.items():
+    for name, d in saved.items():
         sc = StandardScaler()
-        sc.mean_ = sc_data["mean"]
-        sc.scale_ = sc_data["scale"]
+        sc.mean_  = d["mean"]
+        sc.scale_ = d["scale"]
         scalers[name] = sc
     return scalers
 
 
-def load_model(model_dir, device):
-    """Reload a previously-saved trainval artifact (used only by --skip_train)."""
-    model_dir = Path(model_dir)
-    model_path = model_dir / MODEL_FILENAME
-    scaler_path = model_dir / SCALER_FILENAME
-    arch_path = model_dir / ARCH_FILENAME
-
-    if not model_path.exists():
-        raise FileNotFoundError(f"No model weights found at {model_path}")
-    if not scaler_path.exists():
-        raise FileNotFoundError(f"No scalers found at {scaler_path}")
-
-    if arch_path.exists():
-        arch = json.loads(arch_path.read_text())
-        depth, d_h = arch["mpnn_depth"], arch["mpnn_d_h"]
-        logger.info(f"Loaded architecture.json: depth={depth}  d_h={d_h}")
-    else:
-        depth, d_h = config.MPNN_DEPTH, config.MPNN_D_H
-
-
-    scalers = load_scalers(scaler_path)
-    mp = cpnn.BondMessagePassing(depth=depth, d_h=d_h)
-    model = build_multihead_model(mp, scalers, config.FREEZE_ENCODER)
-    model.load_state_dict(torch.load(model_path, map_location="cpu", weights_only=False))
-    model.to(device)
-    model.eval()
-    logger.info(f"Loaded model weights from {model_path}")
-    return model
-
-
-def resolve_encoder(args):
-    """For PIPELINE_MODE values other than 'chemprop' (fresh encoder) or
-    'chemeleon', pulls a real pretrained checkpoint via
-    config.pretrain_checkpoint(subset_name, pipeline_mode=config.PIPELINE_MODE)."""
-    if args.pretrain_ckpt:
-        ckpt = Path(args.pretrain_ckpt)
-        return ckpt, args.subset_name or CHEMPROP_SUBSET_LABEL
-    elif config.PIPELINE_MODE == "chemprop":
-        return None, CHEMPROP_SUBSET_LABEL
+def resolve_encoder_info(args):
+    """Mirrors evaluate_chemprop_multitask.py's encoder resolution in main()."""
+    if config.PIPELINE_MODE == "chemprop":
+        return "chemprop_random_init", "n/a (random init)"
     elif config.PIPELINE_MODE == "chemeleon":
-        return config.CHEMELEON_PATH, CHEMELEON_SUBSET_LABEL
-    else:
+        return "chemeleon", str(config.CHEMELEON_PATH)
+    else:  # "pretrained"
         if args.subset_name is None:
             raise ValueError("--subset_name required when PIPELINE_MODE=pretrained")
-        ckpt = config.pretrain_checkpoint(args.subset_name,
-                                          pipeline_mode=config.PIPELINE_MODE,
-                                          model_arch="multi_head")
-        return ckpt, args.subset_name
+        return "pretrained", str(config.pretrain_checkpoint(args.subset_name))
 
 
-def resolve_trainval_dir(args, run_cfg, subset_label):
-    if args.model_dir:
-        return Path(args.model_dir)
-    return config.finetune_dir(subset_label, run_cfg["run_name"]) / "trainval"
+def resolve_actual_depth(actual_encoder, actual_pretrain_ckpt):
+    if actual_encoder == "chemprop_random_init":
+        return config.MPNN_DEPTH
+    mp = load_encoder(actual_pretrain_ckpt)
+    return mp.depth
 
 
-def _build_encoder(encoder_ckpt):
-    if encoder_ckpt:
-        mp = load_encoder(encoder_ckpt)
-        d_h = mp.state_dict()["W_i.weight"].shape[0]
-        depth = getattr(mp, "depth", config.MPNN_DEPTH)
-        return mp, depth, d_h
-    depth, d_h = config.MPNN_DEPTH, config.MPNN_D_H
-    return cpnn.BondMessagePassing(depth=depth, d_h=d_h), depth, d_h
+def load_multihead_model(checkpoint_path, scalers: dict, depth: int):
+    """Identical to evaluate_chemprop_multitask.load_multihead_model."""
+    state       = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+    hidden_size = state["message_passing.W_i.weight"].shape[0]
 
-
-def train_trainval_model(args, device, out_dir):
-    """Regenerate the 90% train+val split with split functions, config.SEED"""
-    pl.seed_everything(config.SEED)
-
-    run_cfg = config.MULTIHEAD_RUN_CONFIG[args.run_id]
-    encoder_ckpt, subset_label = resolve_encoder(args)
-    logger.info(f"Training trainval model — run_id={args.run_id}  subset={subset_label}")
-    logger.info(f"Output dir: {out_dir}")
-
-    merged_df, _, head_dfs = load_and_merge_datasets(run_cfg)
-    smiles_arr = merged_df[config.SMILES_COL].values
-
-    _, fold_train_smiles, fold_val_smiles, test_smiles = make_multihead_splits(
-        head_dfs, config.SMILES_COL, config.CLUSTER_COL, config.N_FOLDS,
-        config.SPLIT_STRATEGY, config.SEED, test_frac=0.10)
-    train_folds, val_folds, test_idx = resolve_multihead_indices(
-        smiles_arr, fold_train_smiles, fold_val_smiles, test_smiles, config.N_FOLDS)
-    trainval_idx = np.sort(np.concatenate([train_folds[0], val_folds[0]]))
-    logger.info(f"  Regenerated split — trainval: {len(trainval_idx)} | "
-                f"test (held out, unused here): {len(test_idx)}")
-
-    scalers = fit_scalers(merged_df, trainval_idx)
-    train_targets, _ = scale_targets(merged_df, trainval_idx, trainval_idx, scalers)
-
-    featurizer = featurizers.SimpleMoleculeMolGraphFeaturizer()
-    train_ds = MultiHeadDataset(smiles_arr[trainval_idx], train_targets, featurizer)
-    train_loader = build_loader(train_ds, featurizer, config.FINETUNE_BATCH, shuffle=True)
-
-    mp, depth, d_h = _build_encoder(encoder_ckpt)
-    model = build_multihead_model(mp, scalers, config.FREEZE_ENCODER)
-
-    trainer = pl.Trainer(
-        max_epochs=config.FINETUNE_EPOCHS,
-        accelerator=config.ACCELERATOR,
-        devices=1,
-        enable_checkpointing=False,
-        enable_progress_bar=True,
-    )
-    trainer.fit(model, train_loader)
-
-    model.to(device)
+    mp  = cpnn.BondMessagePassing(d_h=hidden_size, depth=depth)
+    agg = cpnn.MeanAggregation()
+    heads = {
+        name: cpnn.RegressionFFN(n_tasks=1, input_dim=mp.output_dim)
+        for name in HEAD_KEYS
+    }
+    model = MultiHeadMPNN(mp=mp, agg=agg, heads=heads, scalers=scalers)
+    model.load_state_dict(state, strict=False)
     model.eval()
-
-    out_dir.mkdir(parents=True, exist_ok=True)
-    torch.save(model.state_dict(), out_dir / MODEL_FILENAME)
-    torch.save(
-        {name: {"mean": sc.mean_, "scale": sc.scale_} for name, sc in scalers.items()},
-        out_dir / SCALER_FILENAME,
-    )
-    (out_dir / ARCH_FILENAME).write_text(json.dumps({"mpnn_depth": depth, "mpnn_d_h": d_h}, indent=2))
-    logger.info(f"trainval model saved: {out_dir / MODEL_FILENAME}  (depth={depth}, d_h={d_h})")
-
     return model
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--run_id", type=str, required=True,
-                        choices=list(config.MULTIHEAD_RUN_CONFIG.keys()))
-    parser.add_argument("--model_dir", type=str, default=None,
-                        help="Where the trainval artifact is cached/loaded (see --skip_train); "
-                             "if omitted, defaults to config.finetune_dir(subset_label, run_name)/trainval.")
-    parser.add_argument("--subset_name", type=str, default=None)
-    parser.add_argument("--pretrain_ckpt", type=str, default=None)
-    parser.add_argument("--skip_train", action="store_true",
-                        help="Reuse a cached model_dir artifact instead of retraining")
+    parser.add_argument("--model_dir", type=str, required=True,
+                        help="Directory containing finetuned_model.pt + scalers.pt")
+    parser.add_argument("--subset_name", type=str, default=None,
+                        help="Required when PIPELINE_MODE=pretrained, to help depth of the pretrain checkpoint")
     parser.add_argument("--input_csv", type=str, required=True,
                         help="CSV with a linear_SMILES column to predict on")
     parser.add_argument("--output_csv", type=str, default="predictions.csv")
@@ -234,21 +134,27 @@ def main():
     device = get_device()
     logger.info(f"Device: {device}")
 
-    run_cfg = config.MULTIHEAD_RUN_CONFIG[args.run_id]
-    _, subset_label = resolve_encoder(args)
-    out_dir = resolve_trainval_dir(args, run_cfg, subset_label)
+    model_dir    = Path(args.model_dir)
+    model_path   = model_dir / "finetuned_model.pt"
+    scalers_path = model_dir / "scalers.pt"
 
-    cached = (
-        args.skip_train
-        and (out_dir / MODEL_FILENAME).exists()
-        and (out_dir / SCALER_FILENAME).exists()
-    )
-    if cached:
-        logger.info(f"--skip_train: loading cached trainval model from {out_dir}")
-        model = load_model(out_dir, device)
-    else:
-        model = train_trainval_model(args, device, out_dir)
+    if not model_path.exists():
+        raise FileNotFoundError(f"No model weights found at {model_path}")
+    if not scalers_path.exists():
+        raise FileNotFoundError(f"No scalers found at {scalers_path}")
 
+    actual_encoder, actual_pretrain_ckpt = resolve_encoder_info(args)
+    actual_depth = resolve_actual_depth(actual_encoder, actual_pretrain_ckpt)
+    logger.info(f"Encoder:      {actual_encoder}  ({actual_pretrain_ckpt})")
+    logger.info(f"Actual depth: {actual_depth} (config.MPNN_DEPTH={config.MPNN_DEPTH})")
+
+    scalers = load_scalers(scalers_path)
+    model   = load_multihead_model(model_path, scalers, depth=actual_depth)
+    model.to(device)
+    model.eval()
+    logger.info(f"Loaded model weights from {model_path}")
+
+    #  Inference on input CSV
     featurizer = featurizers.SimpleMoleculeMolGraphFeaturizer()
 
     input_df = pd.read_csv(args.input_csv)

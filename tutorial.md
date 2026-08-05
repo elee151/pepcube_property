@@ -1,6 +1,6 @@
-# Pepcube Property Pipeline
+# Pepcube Tutorial
 
-Scripts for training, evaluating, and running inference with ChemProp and transformer (ChemBERTa/PepDoRA) models for peptide property prediction.
+Examples on how to run the various scripts for pepcube_transformer (ChemBERTa, PepDoRA) and pepcube_chemprop (classical regression models, chemprop, chemeleon)
 
 ## Setup
 

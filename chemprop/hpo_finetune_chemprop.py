@@ -88,6 +88,25 @@ PHASE1_GRID = {
     "ffn_hidden_dim": [300],
     "aggregation":    ["mean"],
 }
+"""
+# Phase 2 previous with non-frozen: hyperparameters trial list
+PHASE2_CURATED = [
+    {"lr": 1e-4,  "batch_size": 64,  "epochs": 20, "dropout": 0.0, "freeze_encoder_epochs": 0},
+    {"lr": 5e-4,  "batch_size": 64,  "epochs": 50, "dropout": 0.0, "freeze_encoder_epochs": 10},
+    {"lr": 5e-4,  "batch_size": 64,  "epochs": 20, "dropout": 0.3, "freeze_encoder_epochs": 0},
+    {"lr": 5e-5,  "batch_size": 64,  "epochs": 50, "dropout": 0.1, "freeze_encoder_epochs": 0},
+    {"lr": 5e-4,  "batch_size": 64,  "epochs": 50, "dropout": 0.0, "freeze_encoder_epochs": 0},
+    {"lr": 5e-4,  "batch_size": 128, "epochs": 50, "dropout": 0.0, "freeze_encoder_epochs": 0},
+    {"lr": 5e-4,  "batch_size": 128, "epochs": 20, "dropout": 0.3, "freeze_encoder_epochs": 0},
+    {"lr": 1e-4,  "batch_size": 128, "epochs": 50, "dropout": 0.0, "freeze_encoder_epochs": 0,
+     "_label": "config_defaults"},
+    {"lr": 5e-4,  "batch_size": 32,  "epochs": 30, "dropout": 0.0, "freeze_encoder_epochs": 0,
+     "_label": "small_batch_1"},
+    {"lr": 2e-4,  "batch_size": 64,  "epochs": 30, "dropout": 0.0, "freeze_encoder_epochs": 0,
+     "_label": "lr_midpoint_1"},
+
+]
+"""
 
 # Phase 2: hyperparameters trial list
 PHASE2_CURATED = [

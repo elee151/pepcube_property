@@ -49,7 +49,7 @@ logger = logging.getLogger(__name__)
 _RUN_DATE = datetime.now().strftime("%Y-%m-%d")
 _JOB_ID   = os.environ.get("PBS_JOBID", "local").split(".")[0]
 
-#  Local HF cache paths — layout populated by setup_hf_cache.py 
+#  Local HF cache paths
 _HF_HUB_ROOT = config.HF_HUB_CACHE
 
 CHEMBERTA_MTR_DIR = _HF_HUB_ROOT / (
@@ -60,7 +60,7 @@ CHEMBERTA_MTR_DIR = _HF_HUB_ROOT / (
 CHEMBERTA_MLM_WEIGHTS_DIR = _HF_HUB_ROOT / (
     "models--DeepChem--ChemBERTa-77M-MLM/snapshots/"
     "d62f784b9a0a3aab09c788a7fb95a8e1ce89116f"
-)  # has config.json + model.safetensors ONLY — no tokenizer files
+)  # has config.json + model.safetensors
 
 CHEMBERTA_MLM_TOKENIZER_DIR = _HF_HUB_ROOT / (
     "models--DeepChem--ChemBERTa-77M-MLM/snapshots/"

@@ -84,7 +84,24 @@ done
 '> ./logs/$(date +%Y-%m-%d)_chemberta_def_predictions_90_trainval.log 2>&1 &
 echo "PID: $!"
 ```
+### Single-task Transformer (ChemBERTa, PepDoRA)
 
+```bash
+ALL_MODES="chemberta-77m-mtr pepdora"
+ALL_DATASETS="synthesizability chemberta_hemolysis_chemprop_550 even_chemberta_noncanonical_camsol_chemprop_10k"
+ALL_SPLITS="random group"
+nohup bash -c '
+for mode in '"$ALL_MODES"'; do
+  for dataset in '"$ALL_DATASETS"'; do
+    for split in '"$ALL_SPLITS"'; do
+      echo "===Mode=$mode dataset=$dataset split=$split==="
+      SPLIT_STRATEGY="$split" ACCELERATOR=gpu python transformer/finetune_transformer_singletask.py --model_name "$mode" --dataset_name "$dataset"
+    done
+  done
+done
+' > ./logs/$(date +%Y-%m-%d)_finetune_singletask_transformer_all.log 2>&1 &
+echo "PID: $!"
+```
 ### Pretraining
 
 ```bash

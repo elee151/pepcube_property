@@ -91,20 +91,21 @@ PHASE1_GRID = {
 
 # Phase 2: hyperparameters trial list
 PHASE2_CURATED = [
-    {"lr": 1e-4,  "batch_size": 64,  "epochs": 20, "dropout": 0.0, "freeze_encoder_epochs": 0},
-    {"lr": 5e-4,  "batch_size": 64,  "epochs": 50, "dropout": 0.0, "freeze_encoder_epochs": 10},
-    {"lr": 5e-4,  "batch_size": 64,  "epochs": 20, "dropout": 0.3, "freeze_encoder_epochs": 0},
-    {"lr": 5e-5,  "batch_size": 64,  "epochs": 50, "dropout": 0.1, "freeze_encoder_epochs": 0},
-    {"lr": 5e-4,  "batch_size": 64,  "epochs": 50, "dropout": 0.0, "freeze_encoder_epochs": 0},
-    {"lr": 5e-4,  "batch_size": 128, "epochs": 50, "dropout": 0.0, "freeze_encoder_epochs": 0},
-    {"lr": 5e-4,  "batch_size": 128, "epochs": 20, "dropout": 0.3, "freeze_encoder_epochs": 0},
-    {"lr": 1e-4,  "batch_size": 128, "epochs": 50, "dropout": 0.0, "freeze_encoder_epochs": 0,
-     "_label": "config_defaults"},
-    {"lr": 5e-4,  "batch_size": 32,  "epochs": 30, "dropout": 0.0, "freeze_encoder_epochs": 0,
-     "_label": "small_batch_1"},
-    {"lr": 2e-4,  "batch_size": 64,  "epochs": 30, "dropout": 0.0, "freeze_encoder_epochs": 0,
-     "_label": "lr_midpoint_1"},
-
+    {"lr": 5e-4, "batch_size": 64,  "epochs": 20, "dropout": 0.3, "freeze_encoder_epochs": 20,
+     "_label": "current_optimal"},
+    {"lr": 5e-4, "batch_size": 64,  "epochs": 50, "dropout": 0.0, "freeze_encoder_epochs": 50},
+    {"lr": 1e-4, "batch_size": 64,  "epochs": 20, "dropout": 0.0, "freeze_encoder_epochs": 20},
+    {"lr": 5e-5, "batch_size": 64,  "epochs": 50, "dropout": 0.1, "freeze_encoder_epochs": 50},
+    {"lr": 5e-4, "batch_size": 128, "epochs": 50, "dropout": 0.0, "freeze_encoder_epochs": 50},
+    {"lr": 5e-4, "batch_size": 128, "epochs": 20, "dropout": 0.3, "freeze_encoder_epochs": 20},
+    {"lr": 1e-4, "batch_size": 128, "epochs": 50, "dropout": 0.0, "freeze_encoder_epochs": 50,
+     "_label": "config_defaults_frozen"},
+    {"lr": 5e-4, "batch_size": 32,  "epochs": 30, "dropout": 0.0, "freeze_encoder_epochs": 30,
+     "_label": "small_batch_frozen"},
+    {"lr": 2e-4, "batch_size": 64,  "epochs": 30, "dropout": 0.0, "freeze_encoder_epochs": 30,
+     "_label": "lr_midpoint_frozen"},
+    {"lr": 1e-3, "batch_size": 64,  "epochs": 30, "dropout": 0.1, "freeze_encoder_epochs": 30,
+     "_label": "higher_lr_frozen"},
 ]
 
 # Deduplicate: strip _label for comparison, keep first occurrence
@@ -326,7 +327,7 @@ def run_phase1(encoder_ckpt, merged_df, head_dfs, run_id: str):
         "best_mean_val_loss": best_loss,
         "all_results":        results,
     }
-    out_path = OUTPUT_DIR / f"phase1_grid_results_{run_id}.json"
+    out_path = OUTPUT_DIR / f"phase1_grid_results_{run_id}_{config.SPLIT_STRATEGY}.json"
     with open(out_path, "w") as f:
         json.dump(out, f, indent=2)
     logger.info(f"Phase 1 complete. Best: {best_arch}  loss={best_loss:.4f}")
@@ -390,7 +391,7 @@ def run_phase2(best_arch: dict, encoder_ckpt, merged_df, head_dfs, run_id: str):
         "best_mean_val_loss": best_loss,
         "all_results":        results,
     }
-    out_path = OUTPUT_DIR / f"phase2_curated_results_{run_id}.json"
+    out_path = OUTPUT_DIR / f"phase2_curated_results_{run_id}_{config.SPLIT_STRATEGY}.json"
     with open(out_path, "w") as f:
         json.dump(out, f, indent=2)
     logger.info(f"Phase 2 complete. Best dynamics: {best_dynamics}  loss={best_loss:.4f}")
@@ -401,7 +402,7 @@ def run_phase2(best_arch: dict, encoder_ckpt, merged_df, head_dfs, run_id: str):
 #  Write best config
 def write_best_config(best_arch: dict, best_dynamics: dict, run_id: str):
     best = {**best_arch, **best_dynamics}
-    out_path = OUTPUT_DIR / f"best_config_{run_id}.json"
+    out_path = OUTPUT_DIR / f"best_config_{run_id}_{config.SPLIT_STRATEGY}.json"
     with open(out_path, "w") as f:
         json.dump(best, f, indent=2)
     logger.info("=" * 60)

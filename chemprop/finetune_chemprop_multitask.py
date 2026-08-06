@@ -237,10 +237,10 @@ def load_encoder(encoder_ckpt):
 
 #  Model builder 
 
-def build_multihead_model(mp, scalers: dict, freeze_encoder: bool):
+def build_multihead_model(mp, scalers: dict, freeze_encoder: bool, dropout: float = 0.0):
     agg   = cpnn.MeanAggregation()
     heads = {
-        name: cpnn.RegressionFFN(n_tasks=1, input_dim=mp.output_dim)
+        name: cpnn.RegressionFFN(n_tasks=1, input_dim=mp.output_dim, dropout=dropout)
         for name in HEAD_KEYS
     }
     model = MultiHeadMPNN(
@@ -410,6 +410,7 @@ def main():
     logger.info(f"Split strategy:  {config.SPLIT_STRATEGY}  |  N_FOLDS={config.N_FOLDS}")
     logger.info(f"Accelerator:     {config.ACCELERATOR}")
     logger.info(f"Epochs/Batch/LR: {config.FINETUNE_EPOCHS} / {config.FINETUNE_BATCH} / {config.FINETUNE_LR}")
+    logger.info(f"Freeze encoder:  {config.FREEZE_ENCODER}  |  Dropout: {config.DROPOUT}")
 
     logger.info("Loading and merging datasets")
     merged_df, label_map, head_dfs = load_and_merge_datasets(run_cfg)
@@ -477,7 +478,7 @@ def main():
         else:
             mp = cpnn.BondMessagePassing(depth=config.MPNN_DEPTH, d_h=config.MPNN_D_H)
             logger.info(f"  Default encoder: depth={config.MPNN_DEPTH}, d_h={config.MPNN_D_H}")
-        model = build_multihead_model(mp, scalers, config.FREEZE_ENCODER)
+        model = build_multihead_model(mp, scalers, config.FREEZE_ENCODER, dropout=config.DROPOUT)
 
         trainer = pl.Trainer(
             max_epochs=config.FINETUNE_EPOCHS,
@@ -523,6 +524,7 @@ def main():
         "head_datasets":   {k: run_cfg[k] for k in HEAD_KEYS},
         "accelerator":     config.ACCELERATOR,
         "freeze_encoder":  config.FREEZE_ENCODER,
+        "dropout":         config.DROPOUT,
         "finetune_epochs": config.FINETUNE_EPOCHS,
         "finetune_lr":     config.FINETUNE_LR,
         "fold_metrics":    fold_metrics,
@@ -553,7 +555,7 @@ def main():
         final_mp = load_encoder(encoder_ckpt)
     else:
         final_mp = cpnn.BondMessagePassing(depth=config.MPNN_DEPTH, d_h=config.MPNN_D_H)
-    final_model = build_multihead_model(final_mp, final_scalers, config.FREEZE_ENCODER)
+    final_model = build_multihead_model(final_mp, final_scalers, config.FREEZE_ENCODER, dropout=config.DROPOUT)
 
     final_trainer = pl.Trainer(
         max_epochs=config.FINETUNE_EPOCHS,

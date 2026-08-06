@@ -185,7 +185,7 @@ class PretrainDataset(Dataset):
         }
 
 
-#  Model ─
+#  Model
 
 class ChemBERTaPretrainer(torch.nn.Module):
     def __init__(self, model_name_or_path, n_tasks, dropout, freeze_layers, pooling):

@@ -69,7 +69,7 @@ def get_device():
     return torch.device("cpu")
 
 
-#  Model loading — identical to evaluate_chemprop_multitask.py
+#  Model loading, same as evaluate_chemprop_multitask.py
 def load_scalers(scalers_path) -> dict:
     saved = torch.load(scalers_path, map_location="cpu", weights_only=False)
     scalers = {}
@@ -82,7 +82,7 @@ def load_scalers(scalers_path) -> dict:
 
 
 def resolve_encoder_info(args):
-    """Mirrors evaluate_chemprop_multitask.py's encoder resolution in main()."""
+    """Resolves in same way as evaluate_chemprop_multitask.py's in main()."""
     if config.PIPELINE_MODE == "chemprop":
         return "chemprop_random_init", "n/a (random init)"
     elif config.PIPELINE_MODE == "chemeleon":
@@ -101,7 +101,6 @@ def resolve_actual_depth(actual_encoder, actual_pretrain_ckpt):
 
 
 def load_multihead_model(checkpoint_path, scalers: dict, depth: int):
-    """Identical to evaluate_chemprop_multitask.load_multihead_model."""
     state       = torch.load(checkpoint_path, map_location="cpu", weights_only=False)
     hidden_size = state["message_passing.W_i.weight"].shape[0]
 

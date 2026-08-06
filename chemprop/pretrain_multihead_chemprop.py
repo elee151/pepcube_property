@@ -190,8 +190,7 @@ def build_loader(dataset, featurizer, batch_size, shuffle):
 
 def load_encoder(pipeline_mode: str):
     """
-    Initialise the message-passing encoder.
-    "chemprop" : fresh BondMessagePassing, random weights
+    Initialise the message-passing encoder with random weights
     """
     if pipeline_mode == "chemprop":
         logger.info(

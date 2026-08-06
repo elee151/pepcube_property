@@ -80,7 +80,8 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 
 
 # Search spaces
-# Phase 1: architecture
+# Phase 1: architecture.
+# Note the current for multihead ffns use the chemprop defaults for ffn (1 layer, 300 dim, mean) not calling from config.
 PHASE1_GRID = {
     "depth":          [3, 6],
     "d_h":            [300, 600],
@@ -109,7 +110,7 @@ PHASE2_CURATED = [
 """
 
 # Phase 2: hyperparameters trial list
-PHASE2_CURATED = [
+PHASE2_CURATED_V1_FROZEN = [
     {"lr": 5e-4, "batch_size": 64,  "epochs": 20, "dropout": 0.3, "freeze_encoder_epochs": 20,
      "_label": "current_optimal"},
     {"lr": 5e-4, "batch_size": 64,  "epochs": 50, "dropout": 0.0, "freeze_encoder_epochs": 50},
@@ -126,6 +127,14 @@ PHASE2_CURATED = [
     {"lr": 1e-3, "batch_size": 64,  "epochs": 30, "dropout": 0.1, "freeze_encoder_epochs": 30,
      "_label": "higher_lr_frozen"},
 ]
+
+PHASE2_CURATED = [
+    {"lr": 5e-4, "batch_size": 8, "epochs": 30, "dropout": 0.3, "freeze_encoder_epochs": 30},
+    {"lr": 5e-4, "batch_size": 16, "epochs": 30, "dropout": 0.3, "freeze_encoder_epochs": 30},
+    {"lr": 5e-4, "batch_size": 4, "epochs": 30, "dropout": 0.3, "freeze_encoder_epochs": 30},
+]
+
+
 
 # Deduplicate: strip _label for comparison, keep first occurrence
 _seen = []

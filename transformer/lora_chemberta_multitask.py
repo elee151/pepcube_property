@@ -317,7 +317,7 @@ def build_loaders(merged_df, smiles, train_idx, val_idx, scalers, tokenizer):
     return train_loader, val_loader
 
 
-#  Training loop ─
+#  Training loop
 
 def predict_original_scale(model, loader, scalers) -> dict:
     model.eval()

@@ -117,11 +117,24 @@ ACCELERATOR=gpu SPLIT_STRATEGY=group NUM_WORKERS=4 HF_HOME=/home/rbirolo/pepcube
 ALL_SPLITS="random group"
 nohup bash -c '
 for split in '"$ALL_SPLITS"'; do
-  ACCELERATOR=gpu MODEL_ARCH=multi_head MPNN_DEPTH=6 MPNN_D_H=600 FFN_NUM_LAYERS=2 FFN_HIDDEN_DIM=300 AGGREGATION=mean FINETUNE_EPOCHS=20 FINETUNE_BATCH=64 FINETUNE_LR=0.0005 DROPOUT=0.3 FREEZE_ENCODER_EPOCHS=0 SPLIT_STRATEGY="$split" PIPELINE_MODE=pretrained nohup python chemprop/finetune_chemprop_multitask.py --pretrain_pipeline_mode pretrained --run_id full_run --subset_name new_1M --pretrain_ckpt ~/pepcube_property/pretrained_chemprop/pretrained_model.pt
+  ACCELERATOR=gpu MODEL_ARCH=multi_head MPNN_DEPTH=6 MPNN_D_H=600 FINETUNE_EPOCHS=20 FINETUNE_BATCH=64 FINETUNE_LR=0.0005 DROPOUT=0.3 FREEZE_ENCODER_EPOCHS=0 SPLIT_STRATEGY="$split" PIPELINE_MODE=pretrained nohup python chemprop/finetune_chemprop_multitask.py --pretrain_pipeline_mode pretrained --run_id full_run --subset_name new_1M --pretrain_ckpt ~/pepcube_property/pretrained_chemprop/pretrained_model.pt
   MODEL_ARCH=multi_head SPLIT_STRATEGY="$split" PIPELINE_MODE=pretrained nohup python chemprop/evaluate_chemprop_multitask.py --run_id full_run --subset_name new_1M --pretrain_ckpt ~/pepcube_property/pretrained_chemprop/pretrained_model.pt
 done
 '> ./logs/$(date +%Y-%m-%d)_mh_full_run_final_pretrained_ft_ev_both_splits.log 2>&1 &
 ```
+
+### Finetuning Multitask Pretrained - Frozen Encoder Run using HP from a small HPO
+
+```bash
+ALL_SPLITS="random group"
+nohup bash -c '
+for split in '"$ALL_SPLITS"'; do
+MPNN_DEPTH=6 MPNN_D_H=600 ACCELERATOR=gpu MODEL_ARCH=multi_head FINETUNE_EPOCHS=30 FINETUNE_BATCH=8 FINETUNE_LR=0.0005 FREEZE_ENCODER=true DROPOUT=0.0 SPLIT_STRATEGY="$split" PIPELINE_MODE=pretrained nohup python chemprop/finetune_chemprop_multitask.py --run_id full_run --subset_name new_1M_frozen_hpo_small_batch --pretrain_ckpt ~/pepcube_property/pretrained_chemprop/pretrained_model.pt
+MODEL_ARCH=multi_head SPLIT_STRATEGY="$split" PIPELINE_MODE=pretrained nohup python chemprop/evaluate_chemprop_multitask.py --run_id full_run --subset_name new_1M_frozen_hpo_small_batch --pretrain_ckpt ~/pepcube_property/pretrained_chemprop/pretrained_model.pt
+done
+'> ./logs/$(date +%Y-%m-%d)_mh_full_run_frozen_pretrained_ft_ev_both_splits_hpo_small_batch.log 2>&1 &
+```
+
 ### Fine-tuning & evaluation, multitask (Chemprop & Chemeleon) - Default
 
 ```bash

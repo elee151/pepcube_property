@@ -351,7 +351,7 @@ def train_final_model(args, df, smiles, label_col, tokenizer, max_tok,
 
 
 #  Results writing
-def save_results(args, ds_cfg, filter_logs, hf_name, cv_agg, test_metrics):
+def save_results(args, ds_cfg, filter_logs, hf_name, cv_agg, test_metrics, fold_results=None):
     result_record = {
         "run_timestamp":         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "run_date":              _RUN_DATE,
@@ -371,6 +371,7 @@ def save_results(args, ds_cfg, filter_logs, hf_name, cv_agg, test_metrics):
         "split_strategy":        config.SPLIT_STRATEGY,
         "seed":                  config.SEED,
         "cv_agg":                cv_agg,
+        "fold_results":          fold_results or [],
         "test_metrics":          test_metrics,
     }
     json_path = (config.RESULTS_DIR /
@@ -510,11 +511,11 @@ def main():
         else:
             return AutoModel.from_pretrained(hf_name, trust_remote_code=trust_rc)
 
-    # Final-only mode
+    # Final-only
     if args.final_only:
         test_metrics = train_final_model(args, df, smiles, label_col, tokenizer, max_tok,
                                          load_encoder, out_dir, device)
-        save_results(args, ds_cfg, filter_logs, hf_name, {}, test_metrics)
+        save_results(args, ds_cfg, filter_logs, hf_name, {}, test_metrics, fold_results=[])
         return
 
     # Compute / load splits
@@ -606,7 +607,7 @@ def main():
             cv_agg[f"std_{metric}"]  = float(np.std(vals))
     logger.info(f"CV agg: {cv_agg}")
 
-    # Single-fold mode: save fold summary and exit
+    # Single-fold to save fold summary
     if args.fold is not None:
         logger.info(f"Single-fold mode complete — fold {args.fold} done.")
         with open(out_dir / f"fold_{args.fold}_summary.json", "w") as f:
@@ -619,10 +620,10 @@ def main():
             }, f, indent=2)
         return
 
-    # All-folds mode: train final model on 90%, evaluate on test set
+    # Final model on 90%, evaluate on test set
     test_metrics = train_final_model(args, df, smiles, label_col, tokenizer, max_tok,
                                      load_encoder, out_dir, device)
-    save_results(args, ds_cfg, filter_logs, hf_name, cv_agg, test_metrics)
+    save_results(args, ds_cfg, filter_logs, hf_name, cv_agg, test_metrics, fold_results=fold_results)
 
 
 if __name__ == "__main__":

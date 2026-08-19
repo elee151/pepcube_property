@@ -56,7 +56,7 @@ LoRA-based:
 ```bash
 nohup bash -c '
 DATASETS=(
-"./data/mutated_experimental_peptides_150k.csv"
+"./data/mutated_experimental_peptides_90k.csv"
 "./data/converted_literature_sequences.csv"
 "./data/experimental_sequences.csv"
 )
@@ -73,7 +73,7 @@ Default transformer:
 ```bash
 nohup bash -c '
 DATASETS=(
-"./data/mutated_experimental_peptides_150k.csv"
+"./data/mutated_experimental_peptides_90k.csv"
 "./data/converted_literature_sequences.csv"
 "./data/experimental_sequences.csv"
 )
@@ -189,10 +189,11 @@ python chemprop/hpo_pretrain_chemprop.py
 ### Prediction
 
 From finetune model that was from a pretrained encoder: (ChemProp, Multitask, Pretrained)
+
 ```bash
 nohup bash -c '
 DATASETS=("./data/experimental_sequences.csv"
-"./data/mutated_experimental_peptides_150k.csv"
+"./data/mutated_experimental_peptides_90k.csv"
 "./data/converted_literature_sequences.csv")
 
 for input_csv in "${DATASETS[@]}"; do
@@ -207,7 +208,7 @@ From a finetune model that was from a default encoder (ChemProp or Chemeleon):
 ```bash
 nohup bash -c '
 DATASETS=("./data/experimental_sequences.csv"
-"./data/mutated_experimental_peptides_150k.csv"
+"./data/mutated_experimental_peptides_90k.csv"
 "./data/converted_literature_sequences.csv"
 )
 for input_csv in "${DATASETS[@]}"; do

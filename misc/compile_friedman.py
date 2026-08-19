@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from scipy.stats import friedmanchisquare, studentized_range
+from scipy.stats import friedmanchisquare, studentized_range, wilcoxon
 
 METRIC_KEYS = ["rmse", "mae", "r2", "pearson_r", "spearman_r"]
 HIGHER_IS_BETTER = {"r2", "pearson_r", "spearman_r"}
@@ -69,41 +69,42 @@ def classify_model(data):
     model = data.get("model", "")
     if model in BASELINE_MODELS:
         key = (model, "baseline_ml", model)
-        return key, "classical"
+        return key, "classical", "baseline_ml"
 
     model_arch = data.get("model_arch", "")
 
     if "lora" in model_arch:
         key = (model_arch, "transformer", "lora_finetune")
-        return key, "transformer"
+        return key, "transformer", "lora_finetune"
 
     if model_arch.startswith("transformer"):
         model_name = data.get("model_name", "unknown")
         key = (f"{model_arch}_{model_name}", "transformer", model_name)
-        return key, "transformer"
+        return key, "transformer", model_name
 
     if model_arch in ("multi_head", "single_task"):
         pipeline_mode = data.get("pipeline_mode", "")
         subset_label = data.get("subset_label", pipeline_mode or "unknown")
         sub_family = "chemeleon" if pipeline_mode == "chemeleon" else "chemprop"
         key = (model_arch, sub_family, subset_label)
-        return key, "chemprop"
+        return key, "chemprop", sub_family
 
     key = (model_arch or model or "unknown", "unknown", "unknown")
-    return key, "unknown"
+    return key, "unknown", "unknown"
 
 
 def get_model_label(key):
     return MODEL_LABEL_MAP.get(key, "_".join(str(k) for k in key if k))
 
 
-def rows_from_fold_list(fold_list, model_label, family, prop, split_strategy, source_file):
+def rows_from_fold_list(fold_list, model_label, family, sub_family, prop, split_strategy, source_file):
     rows = []
     for entry in fold_list:
         row = {
             "source_file": source_file,
             "model": model_label,
             "family": family,
+            "sub_family": sub_family,
             "property": prop,
             "split_strategy": split_strategy,
             "fold": entry.get("fold"),
@@ -118,7 +119,7 @@ def parse_file(path):
     with open(path) as f:
         data = json.load(f)
 
-    key, family = classify_model(data)
+    key, family, sub_family = classify_model(data)
     model_label = get_model_label(key)
     if key not in MODEL_LABEL_MAP:
         print(f"unmapped model key {key} in {path.name}, using fallback label '{model_label}'")
@@ -128,7 +129,7 @@ def parse_file(path):
 
     if "per_head_fold_results" in data:
         for prop, fold_list in data["per_head_fold_results"].items():
-            rows.extend(rows_from_fold_list(fold_list, model_label, family, prop, split_strategy, source_file))
+            rows.extend(rows_from_fold_list(fold_list, model_label, family, sub_family, prop, split_strategy, source_file))
         return rows
 
     fold_list = data.get("fold_results") or data.get("fold_metrics")
@@ -138,7 +139,7 @@ def parse_file(path):
 
     dataset_name = data.get("dataset_name") or data.get("dataset")
     prop = infer_property(dataset_name)
-    rows.extend(rows_from_fold_list(fold_list, model_label, family, prop, split_strategy, source_file))
+    rows.extend(rows_from_fold_list(fold_list, model_label, family, sub_family, prop, split_strategy, source_file))
     return rows
 
 
@@ -184,6 +185,24 @@ def compute_friedman_significance(df, group_cols, metrics, alpha):
                 **dict(zip(group_cols, key)), "metric": metric, "n_models": n_models,
                 "statistic": stat, "p_value": p, "alpha": alpha, "significant": p < alpha,
             })
+    return pd.DataFrame(rows)
+
+
+def compute_within_family_significance(df, group_cols, metrics, alpha):
+    rows = []
+    for metric in metrics:
+        for key, group in df.groupby(group_cols):
+            key = key if isinstance(key, tuple) else (key,)
+            pivot = group.pivot_table(index="fold", columns="model", values=metric).dropna(axis=1, how="any")
+            n_models = pivot.shape[1]
+            base = {**dict(zip(group_cols, key)), "metric": metric, "n_models": n_models, "alpha": alpha}
+            if n_models >= 3:
+                stat, p = friedmanchisquare(*[pivot[col] for col in pivot.columns])
+                rows.append({**base, "test": "friedman", "statistic": stat, "p_value": p, "significant": p < alpha})
+            elif n_models == 2:
+                col_a, col_b = pivot.columns
+                stat, p = wilcoxon(pivot[col_a], pivot[col_b])
+                rows.append({**base, "test": "wilcoxon", "statistic": stat, "p_value": p, "significant": p < alpha})
     return pd.DataFrame(rows)
 
 
@@ -237,6 +256,12 @@ PROPERTY_DISPLAY_LABELS = {
     "camsol": "Solubility (Non-natural CamSol-PTM)",
     "hemolysis": "Hemolytic Toxicity",
     "synthesizability": "Synthesisability",
+}
+
+FAMILY_DISPLAY_LABELS = {
+    "classical": "Classical ML",
+    "transformer": "Transformer",
+    "chemprop": "ChemProp / Chemeleon",
 }
 
 
@@ -369,12 +394,115 @@ def plot_rank_heatmap(mean_rank_df, friedman_df, split_strategy, properties, out
     return fig
 
 
+def plot_within_family_heatmap(within_family_df, split_strategy, properties, outfile,
+                                metrics=("rmse", "mae", "pearson_r", "spearman_r"),
+                                axes_size=16, axes_size_small=13, font_family="Aptos",
+                                width=None, height=None, metric_labels=None, property_labels=None,
+                                family_labels=None, family_order=None, title=None):
+    metric_labels = metric_labels or DEFAULT_METRIC_LABELS
+    property_labels = property_labels or PROPERTY_DISPLAY_LABELS
+    family_labels = family_labels or FAMILY_DISPLAY_LABELS
+    n_metrics = len(metrics)
+    col_keys = [(p, m) for p in properties for m in metrics]
+
+    sub = within_family_df[
+        (within_family_df["split_strategy"] == split_strategy)
+        & (within_family_df["property"].isin(properties)) & (within_family_df["metric"].isin(metrics))
+    ]
+    families = family_order or sorted(sub["family"].unique())
+
+    z = np.full((len(families), len(col_keys)), np.nan)
+    p_text = [["" for _ in col_keys] for _ in families]
+    for fi, family in enumerate(families):
+        for ci, (p, m) in enumerate(col_keys):
+            row = sub[(sub["family"] == family) & (sub["property"] == p) & (sub["metric"] == m)]
+            if row.empty:
+                continue
+            r = row.iloc[0]
+            z[fi, ci] = 1.0 if bool(r["significant"]) else 0.0
+            p_text[fi][ci] = f"p = {r['p_value']:.3g}"
+
+    y_labels = [family_labels.get(f, f) for f in families]
+    col_labels = [metric_labels.get(m, m) for (p, m) in col_keys]
+
+    n_cols_total, n_rows_total = len(col_keys), len(families)
+    width = width or max(750, 80 * n_cols_total + 340)
+    height = height or max(320, 70 * n_rows_total + 190)
+
+    x_pos, y_pos = list(range(n_cols_total)), list(range(n_rows_total))
+    colorscale = [[0.0, "#EF9A9A"], [0.5, "#EF9A9A"], [0.5, "#A5D6A7"], [1.0, "#A5D6A7"]]
+
+    fig = go.Figure()
+    fig.add_trace(go.Heatmap(
+        z=z, x=x_pos, y=y_pos,
+        zmin=0, zmax=1,
+        colorscale=colorscale, showscale=False,
+        xgap=3, ygap=3,
+    ))
+
+    # cell text: significant/not significant plus the underlying p-value
+    text_x, text_y, text_vals = [], [], []
+    for yi in range(n_rows_total):
+        for xi in range(n_cols_total):
+            val = z[yi, xi]
+            if np.isnan(val):
+                continue
+            text_x.append(xi)
+            text_y.append(yi)
+            text_vals.append(f"{p_text[yi][xi]}")
+
+    fig.add_trace(go.Scatter(
+        x=text_x, y=text_y, mode="text", text=text_vals,
+        textfont=dict(color="black", size=axes_size_small - 2, family=font_family),
+        hoverinfo="skip", showlegend=False,
+    ))
+
+    # thick separators between property groups
+    for i in range(1, len(properties)):
+        fig.add_shape(
+            type="line", xref="x", yref="paper",
+            x0=i * n_metrics - 0.5, x1=i * n_metrics - 0.5, y0=0, y1=1,
+            line=dict(color="black", width=3),
+        )
+
+    # property group headers, once per group, bold and close under the axis
+    for i, property_ in enumerate(properties):
+        center = i * n_metrics + (n_metrics - 1) / 2
+        label = property_labels.get(property_, property_)
+        fig.add_annotation(
+            text=f"<b>{label}</b>", showarrow=False, xref="x", yref="paper",
+            x=center, y=-0.15, xanchor="center", yanchor="top",
+            font=dict(size=axes_size, family=font_family),
+        )
+
+    fig.update_layout(
+        title=dict(text=title or f"Within-Family Significance ({split_strategy.title()} Split)",
+                    font=dict(size=axes_size + 4, family=font_family), x=0.5, xanchor="center"),
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        width=width, height=height,
+        margin=dict(t=70, l=20, r=20, b=90),
+        font=dict(family=font_family),
+        xaxis=dict(showline=True, linecolor="black", mirror=True, ticks="outside", showgrid=False,
+                   tickmode="array", tickvals=x_pos, ticktext=col_labels,
+                   tickfont=dict(size=axes_size_small, family=font_family), side="bottom"),
+        yaxis=dict(showline=True, linecolor="black", mirror=True, ticks="outside", showgrid=False,
+                   tickmode="array", tickvals=y_pos, ticktext=y_labels,
+                   tickfont=dict(size=axes_size_small, family=font_family),
+                   autorange="reversed", automargin=True),
+    )
+
+    fig.write_image(outfile)
+    return fig
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--input-dir", required=True)
     parser.add_argument("--output-csv", default="compiled_folds.csv")
     parser.add_argument("--mean-ranks-csv", default="mean_ranks.csv")
     parser.add_argument("--friedman-csv", default="friedman_results.csv")
+    parser.add_argument("--friedman-within-family-csv", default="friedman_within_family.csv")
     parser.add_argument("--alpha", type=float, default=0.05)
     parser.add_argument("--top-n", type=int, default=15)
     args = parser.parse_args()
@@ -389,9 +517,14 @@ def main():
     friedman_df = compute_friedman_significance(df, group_cols, METRIC_KEYS, args.alpha)
     friedman_df.to_csv(args.friedman_csv, index=False)
 
+    within_family_group_cols = ["family", "property", "split_strategy"]
+    friedman_within_family_df = compute_within_family_significance(df, within_family_group_cols, METRIC_KEYS, args.alpha)
+    friedman_within_family_df.to_csv(args.friedman_within_family_csv, index=False)
+
     properties = ["camsol", "hemolysis", "synthesizability"]
     for split in ["random", "group"]:
         plot_rank_heatmap(mean_ranks, friedman_df, split, properties, f"heatmap_{split}.svg", top_n=args.top_n)
+        plot_within_family_heatmap(friedman_within_family_df, split, properties, f"within_family_heatmap_{split}.svg")
 
 if __name__ == "__main__":
     main()

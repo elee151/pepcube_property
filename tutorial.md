@@ -236,3 +236,30 @@ for model in '"$ALL_MODELS"'; do
 done
 ' > ./logs/$(date +%Y-%m-%d)_baseline_ml_single_task_bothsplits.log 2>&1 &
 ```
+## Peptide Generation using p2smi
+Note this was run locally, from p2smi's genPep script
+
+#Pretraining Dataset
+```bash
+python genPeps.py \
+  --num 1000000 \
+  --min_length 10 \
+  --max_length 35 \
+  --noncanonical 0.0 \
+  --dextro 0.0 \
+  --cyclization_constraints None \
+  --outfile linear_1M_canonical_peptides.fasta
+```
+
+#Non-natural Peptides for CamSol-PTM
+
+```bash
+python genPeps.py \
+  --num 10000 \                            
+  --min_length 10 \
+  --max_length 35 \
+  --noncanonical 0.2 \
+  --dextro 0.0 \
+  --cyclization_constraints all \
+  --outfile nonnatural_10K_peptides.fasta
+```
